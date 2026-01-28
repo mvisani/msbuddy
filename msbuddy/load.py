@@ -244,8 +244,8 @@ def _load_usi(usi: str, adduct: Union[str, None] = None) -> MetaFeature:
     :return: MetaFeature object
     """
     # get spectrum from USI
-    url = 'https://metabolomics-usi.gnps2.org/json/?usi1=' + usi
-    response = get(url)
+    url = 'https://api.metabolomics-usi.gnps2.org/json/?usi1=' + usi
+    response = get(url, timeout=10)
     json_data = loads(response.text)
 
     # check if the USI is valid
