@@ -41,3 +41,8 @@ msbuddy = "msbuddy.main_cmd:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["msbuddy"]
+
+[dependency-groups]
+dev = [
+    "pyinstrument>=5.1.2",
+]

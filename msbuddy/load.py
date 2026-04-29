@@ -185,14 +185,22 @@ def load_mgf(file_path) -> List[MetaFeature]:
                 if identifier in meta_feature_dict:
                     if ms2_spec and meta_feature_dict[identifier].ms2_raw is None:
                         meta_feature_dict[identifier].ms2_raw = (
-                            Spectrum(mz_arr, int_arr) if mz_arr.size > 0 else None
+                            Spectrum(
+                                mz_arr[np.argsort(mz_arr)], int_arr[np.argsort(mz_arr)]
+                            )
+                            if mz_arr.size > 0
+                            else None
                         )
                     elif (
                         ms2_spec is False
                         and meta_feature_dict[identifier].ms1_raw is None
                     ):
                         meta_feature_dict[identifier].ms1_raw = (
-                            Spectrum(mz_arr, int_arr) if mz_arr.size > 0 else None
+                            Spectrum(
+                                mz_arr[np.argsort(mz_arr)], int_arr[np.argsort(mz_arr)]
+                            )
+                            if mz_arr.size > 0
+                            else None
                         )
                     continue
                 # if the same identifier does not exist, create a new MetaFeature
@@ -203,7 +211,11 @@ def load_mgf(file_path) -> List[MetaFeature]:
                             charge=charge,
                             rt=rt,
                             adduct=adduct_str,
-                            ms2=Spectrum(mz_arr, int_arr) if mz_arr.size > 0 else None,
+                            ms2=Spectrum(
+                                mz_arr[np.argsort(mz_arr)], int_arr[np.argsort(mz_arr)]
+                            )
+                            if mz_arr.size > 0
+                            else None,
                             identifier=identifier,
                         )
                     else:
@@ -212,7 +224,11 @@ def load_mgf(file_path) -> List[MetaFeature]:
                             charge=charge,
                             rt=rt,
                             adduct=adduct_str,
-                            ms1=Spectrum(mz_arr, int_arr) if mz_arr.size > 0 else None,
+                            ms1=Spectrum(
+                                mz_arr[np.argsort(mz_arr)], int_arr[np.argsort(mz_arr)]
+                            )
+                            if mz_arr.size > 0
+                            else None,
                             identifier=identifier,
                         )
                     meta_feature_dict[identifier] = mf

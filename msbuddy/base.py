@@ -14,12 +14,12 @@ Description: base classes for msbuddy
 """
 
 import logging
-from typing import Union, Tuple, List
+from typing import List, Tuple, Union
 
 import numpy as np
 from numba import njit
 
-from msbuddy.utils import read_formula, form_arr_to_str
+from msbuddy.utils import form_arr_to_str, read_formula
 
 mass_i = 1.0033548  # mass of neutron
 mass_e = 0.0005486  # mass of electron
@@ -826,7 +826,8 @@ def ms2_denoise(mz_arr, int_arr, top_n=6, per_mass_range=50):
     keep top_n peaks in each per_mass_range
     """
     group_arr = mz_arr // per_mass_range
-    bool_arr = np.array([True] * len(int_arr))
+    n = len(int_arr)
+    bool_arr = np.ones(n, dtype=np.bool_)
 
     for group in np.unique(group_arr):
         group_idx = np.where(group_arr == group)[0]

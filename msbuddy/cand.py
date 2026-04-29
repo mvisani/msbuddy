@@ -13,33 +13,33 @@ GitHub: Philipbear
 Description: generate candidate formula space for a metabolic feature; mass search and bottom-up MS/MS interrogation
 """
 
-from typing import Union, List, Tuple
+from typing import List, Tuple, Union
 
 import numpy as np
 from brainpy import isotopic_variants
 from numba import njit
 
 from msbuddy.base import (
-    Formula,
-    CandidateFormula,
-    MS2Explanation,
-    MetaFeature,
-    check_adduct,
     Adduct,
+    CandidateFormula,
+    Formula,
+    MetaFeature,
+    MS2Explanation,
+    check_adduct,
 )
 from msbuddy.ml import _calc_log_p_norm
 from msbuddy.query import (
     check_common_frag,
     check_common_nl,
-    query_precursor_mass,
     query_fragnl_mass,
+    query_precursor_mass,
 )
 from msbuddy.utils import (
-    form_arr_to_str,
-    enumerate_subformula,
-    read_formula,
-    SubformulaResult,
     FormulaResult,
+    SubformulaResult,
+    enumerate_subformula,
+    form_arr_to_str,
+    read_formula,
 )
 
 
@@ -970,37 +970,42 @@ def assign_subformula_cand_form(
     return mf
 
 
+ELE_MASS_ARR = np.array(
+    [
+        12.000000,
+        1.007825,
+        78.918336,
+        34.968853,
+        18.998403,
+        126.904473,
+        38.963707,
+        14.003074,
+        22.989769,
+        15.994915,
+        30.973762,
+        31.972071,
+    ],
+    dtype=np.float32,
+)
+ELECTRON_MASS = np.float32(0.0005486)
+
+
 @njit
-def _calc_subform_mass(subform_arr: np.array, adduct_charge: int) -> np.array:
+def _calc_subform_mass(subform_arr: np.ndarray, adduct_charge: int) -> np.ndarray:
     """
     Calculate mass of each subformula.
     :param subform_arr: 2D array, each row is a subformula array
     :param adduct_charge: adduct charge
     :return: 1D array, mass of each subformula
     """
-    mass_arr = np.empty(subform_arr.shape[0], dtype=np.float32)
-    ele_mass_arr = np.array(
-        [
-            12.000000,
-            1.007825,
-            78.918336,
-            34.968853,
-            18.998403,
-            126.904473,
-            38.963707,
-            14.003074,
-            22.989769,
-            15.994915,
-            30.973762,
-            31.972071,
-        ],
-        dtype=np.float32,
-    )
-    for i in range(subform_arr.shape[0]):
-        # element wise multiplication
-        mass_arr[i] = np.sum(
-            subform_arr[i, :] * ele_mass_arr, dtype=np.float32
-        ) - np.float32(adduct_charge * 0.0005486)
+    n_rows, n_cols = subform_arr.shape
+    mass_arr = np.empty(n_rows, dtype=np.float32)
+    charge_corr = np.float32(adduct_charge) * ELECTRON_MASS
+    for i in range(n_rows):
+        total = 0.0
+        for j in range(n_cols):
+            total += subform_arr[i, j] * ELE_MASS_ARR[j]
+        mass_arr[i] = total - charge_corr
     return mass_arr
 
 
@@ -1112,57 +1117,53 @@ def _assign_ms2_explanation(
     :param ms2_tol: mz tolerance for fragment ions / neutral losses
     :return: CandidateFormula object
     """
+    mz_array = mf.ms2_processed.mz_array
+    idx_array = mf.ms2_processed.idx_array
+
+    if ppm:
+        tol_array = ms2_tol * mz_array * 1e-6
+    else:
+        tol_array = np.full_like(mz_array, ms2_tol)
+
     candidate_space = None
     ion_mode_int = 1 if mf.adduct.pos_mode else -1
-    for i in range(len(mf.ms2_processed.mz_array)):
-        # retrieve all indices of mass within tolerance
-        this_ms2_tol = (
-            ms2_tol if not ppm else ms2_tol * mf.ms2_processed.mz_array[i] * 1e-6
+
+    for i, (mz, tol) in enumerate(zip(mz_array, tol_array)):
+        left = np.searchsorted(mass_arr, mz - tol)
+        right = np.searchsorted(mass_arr, mz + tol)
+
+        if left == right:
+            continue
+
+        sub = subform_arr[left:right]
+        mass = mass_arr[left:right]
+
+        mask = (
+            _dbe_subform_filter(sub, 0)
+            & _senior_subform_filter(sub)
+            & _valid_subform_check(sub, pre_charged_arr)
         )
-        idx_list = np.where(
-            abs(mf.ms2_processed.mz_array[i] - mass_arr) <= this_ms2_tol
-        )[0]
 
-        if len(idx_list) == 0:
+        if not np.any(mask):
             continue
 
-        # retrieve all subformulas within tolerance
-        this_subform_arr = subform_arr[idx_list, :]
-        this_mass = mass_arr[idx_list]
-
-        # dbe filter (DBE >= 0)
-        bool_arr_1 = _dbe_subform_filter(this_subform_arr, 0)
-
-        # SENIOR rules filter, a soft version
-        bool_arr_2 = _senior_subform_filter(this_subform_arr)
-
-        # valid subformula check
-        bool_arr_3 = _valid_subform_check(this_subform_arr, pre_charged_arr)
-
-        # combine filters
-        bool_arr = bool_arr_1 & bool_arr_2 & bool_arr_3
-        this_subform_arr = this_subform_arr[bool_arr, :]
-        this_mass = this_mass[bool_arr]
-
-        # if no valid subformula, skip
-        if this_subform_arr.shape[0] == 0:
-            continue
+        sub = sub[mask]
+        mass = mass[mask]
+        nl = pre_charged_arr - sub
 
         frag_exp = FragExplanation(
-            mf.ms2_processed.idx_array[i],
-            Formula(this_subform_arr[0, :], ion_mode_int, this_mass[0]),
-            Formula(pre_charged_arr - this_subform_arr[0, :], 0),
+            idx_array[i],
+            Formula(sub[0], ion_mode_int, mass[0]),
+            Formula(nl[0], 0),
         )
-        # add all subformulas
-        if len(this_mass) > 1:
-            for j in range(1, len(this_mass)):
-                frag_exp.add_frag_nl(
-                    Formula(this_subform_arr[j, :], ion_mode_int, this_mass[j]),
-                    Formula(pre_charged_arr - this_subform_arr[j, :], 0),
-                )
+
+        for s, m, nloss in zip(sub[1:], mass[1:], nl[1:]):
+            frag_exp.add_frag_nl(
+                Formula(s, ion_mode_int, m),
+                Formula(nloss, 0),
+            )
 
         if candidate_space is None:
-            # create CandidateSpace object
             candidate_space = CandidateSpace(
                 cf.formula.array, pre_charged_arr, frag_exp_ls=[frag_exp]
             )
