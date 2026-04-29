@@ -296,37 +296,20 @@ class Msbuddy:
 
         # data preprocessing and candidate space generation
         if self.config.parallel:
-            with Pool(
-                processes=int(self.config.n_cpu),
-                initializer=_init_pool,
-                initargs=(shared_data_dict,),
-            ) as pool:
-                async_results = [
-                    pool.apply_async(
-                        _preprocess_and_gen_cand_parallel, (mf, self.config)
-                    )
-                    for mf in batch_data
-                ]
-                # Initialize tqdm progress bar
-                pbar = tqdm(
+            modified_mf_ls = Parallel(
+                n_jobs=int(self.config.n_cpu),
+                verbose=0,
+                backend="threading",
+            )(
+                delayed(_preprocess_and_gen_cand_nonparallel)(mf, self.config)
+                for mf in tqdm(
+                    batch_data,
                     total=len(batch_data),
                     colour="green",
                     desc="Candidate space generation",
-                    file=sys.stdout,
                 )
-                for i, async_result in enumerate(async_results):
-                    pbar.update(1)  # Update tqdm progress bar
-                    try:
-                        modified_mf = async_result.get(timeout=self.config.timeout_secs)
-                        modified_mf_ls.append(modified_mf)
-                    except:
-                        mf = batch_data[i]
-                        logging.warning(
-                            f"Timeout for spectrum {mf.identifier}, mz={mf.mz}, rt={mf.rt}, skipped."
-                        )
-                        modified_mf_ls.append(mf)
-            pbar.close()  # Close tqdm progress bar
-            del async_results
+            )
+
         else:
             # normal loop, timeout implemented using timeout_decorator
             for mf in tqdm(
@@ -364,6 +347,7 @@ class Msbuddy:
             modified_mf_ls = Parallel(
                 n_jobs=int(self.config.n_cpu),
                 verbose=0,
+                backend="threading",
             )(
                 delayed(_gen_subformula)(mf, self.config)
                 for mf in tqdm(
