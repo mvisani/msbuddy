@@ -14,7 +14,6 @@ Description: load databases and data files
 """
 
 import logging
-from calendar import leapdays
 from json import loads as loads
 from pathlib import Path
 from typing import List, Union
