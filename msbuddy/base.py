@@ -17,7 +17,7 @@ import logging
 from typing import List, Tuple, Union
 
 import numpy as np
-from numba import njit
+from numba import boolean, float32, int32, njit
 
 from msbuddy.utils import form_arr_to_str, read_formula
 
@@ -802,7 +802,10 @@ class ProcessedMS2:
             return
 
         bool_arr = ms2_denoise(
-            mz_arr=self.mz_array, int_arr=self.int_array, top_n=top_n_per_50_da
+            mz_arr=self.mz_array,
+            int_arr=self.int_array,
+            top_n=top_n_per_50_da,
+            per_mass_range=50,
         )
         self.idx_array = self.idx_array[bool_arr]
         self.mz_array = self.mz_array[bool_arr]
@@ -820,7 +823,7 @@ class ProcessedMS2:
             self.int_array = self.int_array / np.max(self.int_array)
 
 
-@njit
+@njit(boolean[:](float32[:], float32[:], int32, int32))
 def ms2_denoise(mz_arr, int_arr, top_n=6, per_mass_range=50):
     """
     keep top_n peaks in each per_mass_range

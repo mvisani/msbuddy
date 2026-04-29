@@ -45,4 +45,5 @@ packages = ["msbuddy"]
 [dependency-groups]
 dev = [
     "pyinstrument>=5.1.2",
+    "pytest>=8.3.5",
 ]

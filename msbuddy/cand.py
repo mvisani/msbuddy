@@ -17,7 +17,7 @@ from typing import List, Tuple, Union
 
 import numpy as np
 from brainpy import isotopic_variants
-from numba import njit
+from numba import boolean, float32, int16, njit
 
 from msbuddy.base import (
     Adduct,
@@ -1139,7 +1139,7 @@ def _assign_ms2_explanation(
         mass = mass_arr[left:right]
 
         mask = (
-            _dbe_subform_filter(sub, 0)
+            _dbe_subform_filter(sub, 0.0)
             & _senior_subform_filter(sub)
             & _valid_subform_check(sub, pre_charged_arr)
         )
