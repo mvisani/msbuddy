@@ -14,6 +14,7 @@ Description: load databases and data files
 """
 
 import logging
+from calendar import leapdays
 from json import loads as loads
 from pathlib import Path
 from typing import List, Union
@@ -22,6 +23,7 @@ import numpy as np
 from gdown import download as download
 from joblib import load as j_load
 from requests import get
+from tqdm.auto import tqdm
 
 from msbuddy.base import MetaFeature, Spectrum
 
@@ -134,9 +136,16 @@ def load_mgf(file_path) -> List[MetaFeature]:
     :param file_path: path to mgf file
     :return: list of MetaFeature
     """
+    # Initialize tqdm progress bar
+    pbar = tqdm(
+        colour="green",
+        desc="Loaded spectra",
+        leave=True,
+        unit=" spectra",
+    )
     with open(file_path, "r") as file:
         # create meta_feature_list
-        meta_feature_list = []
+        meta_feature_dict = dict()
         cnt = 0
         for line in file:
             # empty line
@@ -172,22 +181,18 @@ def load_mgf(file_path) -> List[MetaFeature]:
                 #     continue
 
                 # create MetaFeature object if the same identifier does not exist
-                mf_idx = None
-                for idx, mf in enumerate(meta_feature_list):
-                    if mf.identifier == identifier:
-                        mf_idx = idx
-                        break
 
                 # if the same identifier exists, add to the existing MetaFeature
-                if mf_idx is not None:
-                    if ms2_spec and meta_feature_list[mf_idx].ms2_raw is None:
-                        meta_feature_list[mf_idx].ms2_raw = (
+                if identifier in meta_feature_dict:
+                    if ms2_spec and meta_feature_dict[identifier].ms2_raw is None:
+                        meta_feature_dict[identifier].ms2_raw = (
                             Spectrum(mz_arr, int_arr) if mz_arr.size > 0 else None
                         )
                     elif (
-                        ms2_spec is False and meta_feature_list[mf_idx].ms1_raw is None
+                        ms2_spec is False
+                        and meta_feature_dict[identifier].ms1_raw is None
                     ):
-                        meta_feature_list[mf_idx].ms1_raw = (
+                        meta_feature_dict[identifier].ms1_raw = (
                             Spectrum(mz_arr, int_arr) if mz_arr.size > 0 else None
                         )
                     continue
@@ -211,8 +216,9 @@ def load_mgf(file_path) -> List[MetaFeature]:
                             ms1=Spectrum(mz_arr, int_arr) if mz_arr.size > 0 else None,
                             identifier=identifier,
                         )
-                    meta_feature_list.append(mf)
+                    meta_feature_dict[identifier] = mf
                     cnt += 1
+                    pbar.update(1)
                 continue
             else:
                 # if line contains '=', it is a key-value pair
@@ -272,7 +278,8 @@ def load_mgf(file_path) -> List[MetaFeature]:
                     mz_arr = np.append(mz_arr, float(this_mz))
                     int_arr = np.append(int_arr, float(this_int))
 
-    return meta_feature_list
+    pbar.close()
+    return list(meta_feature_dict.values())
 
 
 def _load_usi(usi: str, adduct: Union[str, None] = None) -> MetaFeature:
