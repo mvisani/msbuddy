@@ -17,19 +17,20 @@ import logging
 import pathlib
 import sys
 from multiprocessing import Pool, cpu_count
-from typing import Tuple, Union, List
+from typing import List, Tuple, Union
 
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 from tqdm import tqdm
 
-from msbuddy.base import MetaFeature, Adduct, check_adduct, senior_rules
-from msbuddy.cand import gen_candidate_formula, assign_subformula_cand_form
+from msbuddy.base import Adduct, MetaFeature, check_adduct, senior_rules
+from msbuddy.cand import assign_subformula_cand_form, gen_candidate_formula
 from msbuddy.export import write_batch_results_cmd
-from msbuddy.load import init_db, init_ml_models, load_usi, load_mgf
-from msbuddy.ml import predict_formula_probability, calc_fdr
+from msbuddy.load import init_db, init_ml_models, load_mgf, load_usi
+from msbuddy.ml import calc_fdr, predict_formula_probability
 from msbuddy.query import query_neutral_mass, query_precursor_mass
-from msbuddy.utils import form_arr_to_str, FormulaResult
+from msbuddy.utils import FormulaResult, form_arr_to_str
 
 logging.basicConfig(level=logging.WARNING)
 
@@ -360,24 +361,18 @@ class Msbuddy:
         modified_mf_ls = []  # modified metabolic feature list
 
         if self.config.parallel:
-            with Pool(processes=int(self.config.n_cpu)) as pool:
-                async_results = [
-                    pool.apply_async(_gen_subformula, (mf, self.config))
-                    for mf in batch_data
-                ]
-
-                pbar = tqdm(
-                    total=len(batch_data),
+            modified_mf_ls = Parallel(
+                n_jobs=int(self.config.n_cpu),
+                verbose=0,
+            )(
+                delayed(_gen_subformula)(mf, self.config)
+                for mf in tqdm(
+                    batch_data,
                     colour="green",
                     desc="Subformula assignment: ",
-                    file=sys.stdout,
                 )
-                for i, async_result in enumerate(async_results):
-                    pbar.update(1)  # Update tqdm progress bar
-                    modified_mf = async_result.get()
-                    modified_mf_ls.append(modified_mf)
-            pbar.close()  # Close tqdm progress bar
-            del async_results
+            )
+
         else:
             # normal loop
             for mf in tqdm(
